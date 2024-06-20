@@ -18,20 +18,36 @@ def main():
             break
         else:
             print("Invalid. Please choose only (1) vertical or (2) crazy.")
+
     
-    img_Res = blending(img_A, img_B, img_Mask)
+    # make a lowpass filter (gaussian blur)
+    img_GA = makeGaussianStack(img_A)
+    img_GB = makeGaussianStack(img_B)
+    img_GC = makeGaussianStack(img_Mask)
+
+
+    img_LA = makeLaplacianStackfromGS(img_GA)
+    img_LB = makeLaplacianStackfromGS(img_GB)
+
+
+    img_LS = []
+
+    for i in range(len(img_LA)):
+        img_LS.append(((img_LA[i]*img_GC[i]) + (img_LB[i]*(1-img_GC[i]))))
+    
+    img_Res = sum(img_LS)   
     
     
     if blend_type == 1:
         blendVert = plot_Img(img_A, img_B, img_Mask, img_Res)
-        blendVert.savefig('trial/blendVert.png', bbox_inches='tight')
-        plt.imsave('trial/blendVert_res.png', np.clip(img_Res, 0, 1))
+        blendVert.savefig('output/blendVert.png', bbox_inches='tight')
+        plt.imsave('output/blendVert_res.png', np.clip(img_Res, 0, 1))
         plt.show()
 
     elif blend_type == 2: 
         blendCrz = plot_Img(img_A, img_B, img_Mask, img_Res)
-        blendCrz.savefig('trial/blendCrz.png', bbox_inches='tight')
-        plt.imsave('trial/crzVert_res.png', np.clip(img_Res, 0, 1))
+        blendCrz.savefig('output/blendCrz.png', bbox_inches='tight')
+        plt.imsave('output/crzVert_res.png', np.clip(img_Res, 0, 1))
 
         plt.show()
     
@@ -71,6 +87,37 @@ def process_img(img_path):
     return img
 
 
+# function for creating the gaussian stack
+def makeGaussianStack(img, count=5, sigmaValues=[0,2,4,6,8]):
+    _temp = []
+
+    for i in range(count):
+        if sigmaValues[i] > 0:
+            ksize = [0, 0]  # If sigma is greater than 0
+        else:
+            ksize = (5, 5)  # If sigma is 0 or less
+
+        # Applying Gaussian blur to the input image with the specified sigma value and kernel size
+        blurred_img = cv2.GaussianBlur(img, ksize=ksize, sigmaX=sigmaValues[i])
+        
+        # Adding the blurred image to the list
+        _temp.append(blurred_img)
+    
+    return _temp
+
+
+# make a laplacian stack from the gaussian stack created
+def makeLaplacianStackfromGS(GS_img):
+    _temp = []
+    count = len(GS_img ) - 1        # Laplacian pyramid has one less level than the Gaussian pyramid
+    for i in range(count):
+        _temp.append(GS_img[i] - GS_img[i+1]) #captures the details lost
+
+    _temp.append(GS_img[i])
+
+    return _temp
+
+
 # plot the images
 def plot_Img(img_A, img_B, img_C, img_Res):
     
@@ -92,54 +139,6 @@ def plot_Img(img_A, img_B, img_C, img_Res):
     plt.tight_layout()
 
     return fig
-
-def blending(img_A, img_B, img_Mask):
-    count = 5
-    sigmaValues = [0, 2, 4, 6, 8]
-
-    # Create Gaussian stacks
-    img_GA = []
-    img_GB = []
-    img_GC = []
-
-    for i in range(count):
-        ksize = [0, 0] if sigmaValues[i] > 0 else (5, 5)
-        
-        blurred_A = cv2.GaussianBlur(img_A, ksize=ksize, sigmaX=sigmaValues[i])
-        blurred_B = cv2.GaussianBlur(img_B, ksize=ksize, sigmaX=sigmaValues[i])
-        blurred_C = cv2.GaussianBlur(img_Mask, ksize=ksize, sigmaX=sigmaValues[i])
-        
-        img_GA.append(blurred_A)
-        img_GB.append(blurred_B)
-        img_GC.append(blurred_C)
-
-    # Create Laplacian stacks from Gaussian stacks
-    img_LA = []
-    img_LB = []
-
-    for i in range(count - 1):
-        laplacian_A = img_GA[i] - img_GA[i + 1]
-        laplacian_B = img_GB[i] - img_GB[i + 1]
-        img_LA.append(laplacian_A)
-        img_LB.append(laplacian_B)
-
-    img_LA.append(img_GA[-1])
-    img_LB.append(img_GB[-1])
-
-    # Blend Laplacian stacks
-    img_LS = []
-
-    for la, lb, gc in zip(img_LA, img_LB, img_GC):
-        ls = la * gc + lb * (1 - gc)
-        img_LS.append(ls)
-
-    # Reconstruct the blended image from the Laplacian stack
-    img_Res = np.zeros_like(img_LS[0])
-    
-    for img in img_LS:
-        img_Res += img
-
-    return img_Res
 
 
 
